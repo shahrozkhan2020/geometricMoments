@@ -1,0 +1,9 @@
+﻿  Source.cpp
+H:\Project with Prof Kaklis\01 BAR\geometricMoments\geometricMoments\stl_reader.h(711,34): warning C4244: 'argument': conversion from 'std::streamsize' to 'const unsigned int', possible loss of data
+H:\Project with Prof Kaklis\01 BAR\geometricMoments\geometricMoments\Source.cpp(36,27): warning C4018: '<': signed/unsigned mismatch
+  geometricMoments.cpp
+H:\Project with Prof Kaklis\01 BAR\geometricMoments\geometricMoments\stl_reader.h(711,34): warning C4244: 'argument': conversion from 'std::streamsize' to 'const unsigned int', possible loss of data
+H:\Project with Prof Kaklis\01 BAR\geometricMoments\geometricMoments\geometricMoments.cpp(144,20): warning C4018: '<': signed/unsigned mismatch
+H:\Project with Prof Kaklis\01 BAR\geometricMoments\geometricMoments\geometricMoments.cpp(148,21): warning C4018: '<': signed/unsigned mismatch
+  Generating Code...
+  geometricMoments.vcxproj -> H:\Project with Prof Kaklis\01 BAR\geometricMoments\Debug\geometricMoments.exe

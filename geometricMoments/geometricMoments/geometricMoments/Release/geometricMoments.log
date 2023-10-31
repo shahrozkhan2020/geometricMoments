@@ -1,0 +1,9 @@
+﻿  Source.cpp
+H:\Project with Prof Kaklis\01 BAR\geometricMoments\geometricMoments\stl_reader.h(711,34): warning C4244: 'argument': conversion from 'std::streamsize' to 'const unsigned int', possible loss of data
+H:\Project with Prof Kaklis\01 BAR\geometricMoments\geometricMoments\Source.cpp(36,27): warning C4018: '<': signed/unsigned mismatch
+  Generating code
+  3 of 953 functions ( 0.3%) were compiled, the rest were copied from previous compilation.
+    0 functions were new in current compilation
+    0 functions had inline decision re-evaluated but remain unchanged
+  Finished generating code
+  geometricMoments.vcxproj -> H:\Project with Prof Kaklis\01 BAR\geometricMoments\Release\geometricMoments.exe
