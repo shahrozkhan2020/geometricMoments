@@ -1,0 +1,296 @@
+Option Explicit
+'Script written by <insert name>
+'Script copyrighted by <insert company name>
+'Script version 01 September 2023 16:31:25
+
+Call Main()
+Sub Main()
+	Rhino.Command("SelAll")
+	Rhino.Command("Delete")
+	Dim desNo, pointSet,ptCrv(), strCrv, i, j, k, m, temp, stern(), totalNoOfPtsOnEachCrv, endPtForLoft, temp_end(), temp_start()
+	totalNoOfPtsOnEachCrv = 100
+	ReDim stern(1)
+	Dim curvesInEachPatch, surfaces()
+	Dim numOfPointsInCurve, firstCurve, ptCrv_temp, strCrv_temp(), lastCrvOfPatch2
+	ReDim strCrv_temp(3)
+	firstCurve = False
+	curvesInEachPatch = array(42, 21, 21, 22, 21, 121)
+	For desNo = 6 To 6
+		Rhino.Command("SelAll")
+		Rhino.Command("Delete")
+		
+		pointSet = ImportPoints("C:\Users\Shahroz.Khan\OneDrive - BA Technologies Ltd\Documents\Design Points_" & CStr(desNo) & ".txt")
+		ReDim ptCrv(0)
+		ReDim strCrv(0)
+		ReDim surfaces(0)
+		' this is the code for the first four/Five patch at the AFT
+		k = 0
+		j = 0
+		While UBound(surfaces) <= UBound(curvesInEachPatch)
+			ptCrv(UBound(ptCrv)) = pointSet(k)
+			ReDim Preserve ptCrv(UBound(ptCrv)+1)
+			If UBound(ptCrv) = numOfPointsInCurve Then
+				ReDim Preserve ptCrv(UBound(ptCrv)-1)
+				If firstCurve = False And numOfPointsInCurve = (totalNoOfPtsOnEachCrv + 1) Then
+					If totalNoOfPtsOnEachCrv = 50 Then
+						ptCrv_temp = getSegmentedPoints_50(ptCrv)
+					Else
+						ptCrv_temp = getSegmentedPoints(ptCrv)
+					End If
+
+					strCrv_temp(0) = Rhino.AddInterpCurveEx(ptCrv_temp(0))
+					strCrv_temp(1) = Rhino.AddInterpCurveEx(ptCrv_temp(1))
+					strCrv_temp(2) = Rhino.AddInterpCurveEx(ptCrv_temp(2))
+					strCrv_temp(3) = Rhino.AddInterpCurveEx(ptCrv_temp(3))
+					
+					strCrv(UBound(strCrv)) = Rhino.JoinCurves(strCrv_temp)(0) 'Rhino.AddInterpCurveEx(ptCrv)
+					firstCurve = True
+				Else
+					strCrv(UBound(strCrv)) = Rhino.AddInterpCurveEx(ptCrv)
+				End If
+				ReDim Preserve strCrv(UBound(strCrv) + 1)
+				ReDim ptCrv(0)
+			End If
+			k = k + 1
+			
+			If UBound(strCrv) = curvesInEachPatch(j) Then
+				ReDim Preserve strCrv(UBound(strCrv)-1)
+				If j = 0 Then
+					stern(0) = Rhino.CopyObject(strCrv(0))
+					
+				End If
+				If j = 1 Then
+					lastCrvOfPatch2 = Rhino.CopyObject(strCrv(UBound(strCrv)))
+					stern(1) = Rhino.CopyObject(strCrv(0))
+				End If
+				If j = 2 Then
+					ReDim temp(UBound(strCrv)+1)
+					temp(0) = lastCrvOfPatch2
+					For m = 0 To UBound(strCrv)
+						temp(m + 1) = strCrv(m)
+					Next
+					strCrv = temp
+				End If
+				If j = 3 Then
+					endPtForLoft = Rhino.CurveEndPoint(strCrv(0))
+				End If
+				If j = 4 Then
+					ReDim temp_end(0)
+					ReDim temp_start(0)
+					temp_end(0) = endPtForLoft
+					temp_start(0) = endPtForLoft
+					For m = 0 To UBound(strCrv)
+						ReDim Preserve temp_end(UBound(temp_end)+1)
+						ReDim Preserve temp_start(UBound(temp_start)+1)
+						temp_end(m + 1) = Rhino.CurveEndPoint(strCrv(m))
+						temp_start(m + 1) = Rhino.CurveStartPoint(strCrv(m))
+					Next
+					surfaces(UBound(surfaces)) = Rhino.AddLoftSrf(array(Rhino.AddInterpCurveEx(temp_end), Rhino.AddInterpCurveEx(temp_start)), , , 3, 0)(0)
+				Else
+					surfaces(UBound(surfaces)) = Rhino.AddLoftSrf(strCrv, , , 3, 0)(0)
+				End If
+				
+				ReDim Preserve surfaces(UBound(surfaces) + 1)
+				ReDim strCrv(0)
+				j = j + 1
+			End If
+			
+			If UBound(surfaces) < 5 Then
+				numOfPointsInCurve = round(totalNoOfPtsOnEachCrv * 0.30) + 1
+			Else
+				numOfPointsInCurve = totalNoOfPtsOnEachCrv + 1
+			End If
+		Wend
+		
+		Dim s, s_m, trans
+		s = Rhino.JoinCurves(stern, True)(0)
+		s_m = Rhino.MirrorObject(s, Rhino.WorldZXPlane, True)
+		
+		trans = Rhino.AddLoftSrf(array(s, s_m), , , 3, 0)(0)
+		ReDim Preserve surfaces(UBound(surfaces) - 1)
+		
+		Rhino.Command("SelCrv")
+		Rhino.Command("Delete")
+		
+		Dim hull_half_1, hull_half_2, hull
+		hull_half_1 = Rhino.JoinSurfaces(surfaces, True)
+
+		hull_half_2 = Rhino.MirrorObject(hull_half_1, Rhino.WorldZXPlane, True)
+		
+		hull = Rhino.JoinSurfacesEx(array(hull_half_1, hull_half_2, trans), True)(0)
+		
+		' this is the code for the Middle and foward part
+		Rhino.CapPlanarHoles hull
+		Rhino.Command("_SelAll _Volume _Enter")
+	Next
+	
+End Sub
+
+
+'---------------------------------------------------------------
+' Subroutine: ImportPoints
+' Purpose:    Import points from a text file.
+'---------------------------------------------------------------
+Function ImportPoints(strFileName)
+	Dim arrAllPoint()
+	' Prompt the user for a file to import
+	Dim strFilter
+	strFilter = "Text File (*.txt)|*.txt|All Files (*.*)|*.*|"
+	'	strFileName = Rhino.OpenFileName("Open Point File", strFilter)
+	If IsNull(strFileName) Then Exit Function
+ 
+	' The the file system object
+	Dim objFSO, objFile
+	Set objFSO = CreateObject("Scripting.FileSystemObject")
+	' Try opening the text file
+	On Error Resume Next
+	Set objFile = objFSO.OpenTextFile(strFileName, 1)
+	If Err Then
+		MsgBox Err.Description
+		Exit Function
+	End If
+ 
+	Rhino.EnableRedraw False
+ 
+	' Read each line from the file
+	Dim strLine, arrPoint, i
+	i = 0
+	Do While objFile.AtEndOfStream <> True
+		strLine = objFile.ReadLine
+		If Not IsNull(strLine) Then
+			' Remove any double-quote characters
+			strLine = Replace(strLine, Chr(34), , 1)
+			' Convert the string to a 3D point
+			arrPoint = Rhino.Str2Pt(strLine)
+			' Add the point to Rhino
+			If IsArray(arrPoint) Then
+				ReDim Preserve arrAllPoint(i)
+				' AddPoint will add a point object to Rhino
+				'	Rhino.AddPoint arrPoint
+				arrAllPoint(i) = arrPoint
+				i = i + 1
+			End If
+		End If
+	Loop
+ 
+	Rhino.EnableRedraw True
+	objFile.Close
+	Set objFile = Nothing
+	Set objFSO = Nothing
+	
+	ImportPoints = arrAllPoint
+End Function
+
+Function getSegmentedPoints(arrPoints)
+	Dim i, j
+	Dim segPoints(), temp_segPoints()
+	ReDim temp_segPoints(0)
+	
+	' For first curve whose points are from 0-18
+	j = 1
+	temp_segPoints(0) = arrPoints(0)
+	For i = 1 To 18 ' if we do any chnage it only happen here 
+		ReDim Preserve temp_segPoints(UBound(temp_segPoints)+1)
+		temp_segPoints(j) = arrPoints(i)
+		j = j + 1
+	Next
+	ReDim segPoints(0)
+	segPoints(0) = temp_segPoints
+	
+	' For second curve whose points are from 18-70
+	ReDim temp_segPoints(0)
+	j = 0
+	For i = 18 To 70' if we do any chnage it only happen here 
+		temp_segPoints(j) = arrPoints(i)
+		ReDim Preserve temp_segPoints(UBound(temp_segPoints)+1)
+		j = j + 1
+	Next	
+	ReDim Preserve temp_segPoints(UBound(temp_segPoints)-1)
+	ReDim Preserve segPoints(UBound(segPoints)+1)
+	segPoints(UBound(segPoints)) = temp_segPoints
+	
+	
+	' For second curve whose points are from 70-82
+	ReDim temp_segPoints(0)
+	j = 0
+	For i = 70 To 98' if we do any chnage it only happen here 
+		temp_segPoints(j) = arrPoints(i)
+		ReDim Preserve temp_segPoints(UBound(temp_segPoints)+1)
+		j = j + 1
+	Next	
+	ReDim Preserve temp_segPoints(UBound(temp_segPoints)-1)
+	ReDim Preserve segPoints(UBound(segPoints)+1)
+	segPoints(UBound(segPoints)) = temp_segPoints
+	
+	
+	' For second curve whose points are from 82-100
+	ReDim temp_segPoints(0)
+	j = 0
+	For i = 98 To 100' if we do any chnage it only happen here 
+		temp_segPoints(j) = arrPoints(i)
+		ReDim Preserve temp_segPoints(UBound(temp_segPoints)+1)
+		j = j + 1
+	Next	
+	ReDim Preserve temp_segPoints(UBound(temp_segPoints)-1)
+	ReDim Preserve segPoints(UBound(segPoints)+1)
+	segPoints(UBound(segPoints)) = temp_segPoints
+	
+	getSegmentedPoints = segPoints
+End Function
+
+Function getSegmentedPoints_50(arrPoints)
+	Dim i, j
+	Dim segPoints(), temp_segPoints()
+	ReDim temp_segPoints(0)
+	
+	' For first curve whose points are from 0-18
+	j = 1
+	temp_segPoints(0) = arrPoints(0)
+	For i = 1 To 9 ' if we do any chnage it only happen here 
+		ReDim Preserve temp_segPoints(UBound(temp_segPoints)+1)
+		temp_segPoints(j) = arrPoints(i)
+		j = j + 1
+	Next
+	ReDim segPoints(0)
+	segPoints(0) = temp_segPoints
+	
+	' For second curve whose points are from 18-70
+	ReDim temp_segPoints(0)
+	j = 0
+	For i = 9 To 37' if we do any chnage it only happen here 
+		temp_segPoints(j) = arrPoints(i)
+		ReDim Preserve temp_segPoints(UBound(temp_segPoints)+1)
+		j = j + 1
+	Next	
+	ReDim Preserve temp_segPoints(UBound(temp_segPoints)-1)
+	ReDim Preserve segPoints(UBound(segPoints)+1)
+	segPoints(UBound(segPoints)) = temp_segPoints
+	
+	
+	' For second curve whose points are from 70-82
+	ReDim temp_segPoints(0)
+	j = 0
+	For i = 37 To 49' if we do any chnage it only happen here 
+		temp_segPoints(j) = arrPoints(i)
+		ReDim Preserve temp_segPoints(UBound(temp_segPoints)+1)
+		j = j + 1
+	Next	
+	ReDim Preserve temp_segPoints(UBound(temp_segPoints)-1)
+	ReDim Preserve segPoints(UBound(segPoints)+1)
+	segPoints(UBound(segPoints)) = temp_segPoints
+	
+	
+	' For second curve whose points are from 82-100
+	ReDim temp_segPoints(0)
+	j = 0
+	For i = 49 To 50' if we do any chnage it only happen here 
+		temp_segPoints(j) = arrPoints(i)
+		ReDim Preserve temp_segPoints(UBound(temp_segPoints)+1)
+		j = j + 1
+	Next	
+	ReDim Preserve temp_segPoints(UBound(temp_segPoints)-1)
+	ReDim Preserve segPoints(UBound(segPoints)+1)
+	segPoints(UBound(segPoints)) = temp_segPoints
+	
+	getSegmentedPoints_50 = segPoints
+End Function

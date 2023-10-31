@@ -1,0 +1,927 @@
+Option Explicit
+'Script written by <insert name>
+'Script copyrighted by <insert company name>
+'Script version 01 September 2023 16:31:25
+
+Call Main()
+Sub Main()
+	Rhino.Command("SelAll")
+	Rhino.Command("Delete")
+	Dim desNo, pointSet,ptCrv(), strCrv, i, j, k, m, temp, stern(), totalNoOfPtsOnEachCrv, endPtForLoft(), temp_end(), n
+	Dim checkPoints(), checkCurves(), checkCrvJoin, checkCrvDivid, shaftLocation, shaftObj, s_pt_1, s_pt_2,s_pt_3, shaftCapObj, finalShaftObj, enginePT, engineLine
+	Dim curvesInEachPatch, surfaces(), deckLine, meshRefLine, dp_ShaftHeight, joined_hull_parts, hull_parts 
+	Dim numOfPointsInCurve, firstCurve, ptCrv_temp, strCrv_temp(), lastCrvOfPatch2, hullDeck, hullEdges, TransomHeight_PT, all_pyhsicalParas
+	Dim s05_PropHubFrontFromAP,s06_PropKeelClearance,p112_PropHullClearancePct, Point_5_line, Point_5
+	Dim EngineAftmostPosition, BaselineToHullAtAP, TransomHeight, Beam, meshRefinePT, Volume, LCB, Volume_Beam_LCB, BaselineToHullAtAP_PT, Beam_PT, pyhsicalParas, pyhsicalParas_str, pyhsicalParas_fileLoc
+	Rhino.UnitSystem  4, True
+	ReDim all_pyhsicalParas(0)
+	For desNo = 512 To 540
+		ReDim checkPoints(0), checkCurves(0), endPtForLoft(0)
+		Rhino.Print("Design ++++++++++++++++++++: " & Cstr(desNo))
+		totalNoOfPtsOnEachCrv = 100
+		numOfPointsInCurve = array(19, 53, 53, 29, 3, 101)
+		curvesInEachPatch = array(42, 21, 21, 22, 21, 71) ' last element here will selctions at middle + 21; If then senction at midddle are 100 then it should be 100+21
+		
+		n = 0
+		ReDim stern(1)
+		firstCurve = False
+		ReDim strCrv_temp(3)
+		Rhino.Command("SelAll")
+		Rhino.Command("Delete")
+		
+		pointSet = ImportPoints("H:\152 DM-BAR tanker optimisation - General\C- Naval Arch\Dimension Reduction\samples for CFD\design grid\DM_design_sample_" & Cstr(desNo) & ".txt")
+		ReDim ptCrv(0)
+		ReDim strCrv(0)
+		ReDim surfaces(0)
+		' this is the code for the first four/Five patch at the AFT
+		k = 0
+		j = 0
+		While UBound(surfaces) <= UBound(curvesInEachPatch)
+			ptCrv(UBound(ptCrv)) = pointSet(k)
+			ReDim Preserve ptCrv(UBound(ptCrv)+1)
+			If UBound(ptCrv) = numOfPointsInCurve(n) Then
+				ReDim Preserve ptCrv(UBound(ptCrv)-1)
+				If firstCurve = False And numOfPointsInCurve(n) = (totalNoOfPtsOnEachCrv + 1) Then
+					ReDim Preserve checkCurves(UBound(checkCurves)-1)
+					checkCrvJoin = Rhino.JoinCurves(checkCurves)(0)
+					checkCrvDivid = Rhino.DivideCurve(checkCrvJoin, totalNoOfPtsOnEachCrv)
+					
+					ptCrv_temp = getSegmentedPoints_v2(checkCrvJoin, checkPoints, checkCrvDivid)
+					
+					strCrv_temp(0) = Rhino.AddInterpCurveEx(ptCrv_temp(0))
+					strCrv_temp(1) = Rhino.AddInterpCurveEx(ptCrv_temp(1))
+					strCrv_temp(2) = Rhino.AddInterpCurveEx(ptCrv_temp(2))
+					strCrv_temp(3) = Rhino.AddInterpCurveEx(ptCrv_temp(3))
+				
+					strCrv(UBound(strCrv)) = Rhino.JoinCurves(strCrv_temp)(0) 
+					
+					ReDim Preserve strCrv(UBound(strCrv) + 1)
+					strCrv(UBound(strCrv)) = Rhino.AddInterpCurveEx(ptCrv)
+					
+					firstCurve = True
+				Else
+					strCrv(UBound(strCrv)) = Rhino.AddInterpCurveEx(ptCrv)
+				End If
+				ReDim Preserve strCrv(UBound(strCrv) + 1)
+				ReDim ptCrv(0)
+			End If
+			k = k + 1
+			
+			If UBound(strCrv) = curvesInEachPatch(j) Then
+				ReDim Preserve strCrv(UBound(strCrv)-1)
+				If j = 0 Or j = 2 Or j = 3 Or j = 4 Then
+					checkPoints(UBound(checkPoints)) = Rhino.CurveEndPoint(strCrv(UBound(strCrv)))
+					checkCurves(UBound(checkCurves)) = Rhino.CopyObject(strCrv(UBound(strCrv)))
+					ReDim Preserve checkPoints(UBound(checkPoints)+1)
+					ReDim Preserve checkCurves(UBound(checkCurves)+1)
+				End If 
+				If j = 0 Then
+					stern(0) = Rhino.CopyObject(strCrv(0))
+				End If
+				If j = 1 Then
+					lastCrvOfPatch2 = Rhino.CopyObject(strCrv(UBound(strCrv)))
+					stern(1) = Rhino.CopyObject(strCrv(0))
+					
+					TransomHeight_PT = Rhino.AddPoint(Rhino.CurveEndPoint(strCrv(0)))
+					
+				End If
+				If j = 2 Then
+					ReDim temp(UBound(strCrv)+1)
+					temp(0) = lastCrvOfPatch2
+					For m = 0 To UBound(strCrv)
+						temp(m + 1) = strCrv(m)
+					Next
+					strCrv = temp
+				End If
+				If j = 3 Then
+					For m = 0 To UBOund(strCrv)
+						endPtForLoft(UBound(endPtForLoft)) = Rhino.CurveEndPoint(strCrv(m))
+						ReDim Preserve endPtForLoft(UBound(endPtForLoft)+1)
+					Next
+					'''' here we are doing shaft stuff/hub 
+					s05_PropHubFrontFromAP = 6292 / 1000 
+					s06_PropKeelClearance = 150 / 1000 
+					p112_PropHullClearancePct = 0.095 / 1000
+					Point_5_line = Rhino.AddLine(array(S05_PropHubFrontFromAP, 0, 0), array(S05_PropHubFrontFromAP, 0, 100))
+					
+						
+					'dp_ShaftHeight = s06_PropKeelClearance + (0.5 * Point_5_z - s06_PropKeelClearance) / (p112_PropHullClearancePct + 1.0)
+
+					'meshRefLine = Rhino.AddLine(endPtForLoft(0), array(endPtForLoft(0)(0), endPtForLoft(0)(1), 100))
+					'shaftLocation = FirstZIntersection(strCrv(0), shaftLine)
+					'shaftLocation(0) = 4.130
+					'shaftLocation(1) = 0
+					'shaftLocation(2) = shaftLocation(2) + 0.675
+					'Rhino.AddPoint shaftLocation
+					'shaftObj = CreateAndExtrudeCircleYZ(shaftLocation, 0.675, 50)
+					's_pt_1 = array(shaftLocation(0), shaftLocation(1), shaftLocation(2) - 0.675)
+					's_pt_2 = array(shaftLocation(0) - 0.410, shaftLocation(1), shaftLocation(2) - 0.675)
+					's_pt_3 = array(shaftLocation(0) - 0.410, shaftLocation(1), shaftLocation(2))
+					'shaftCapObj = Rhino.AddRevSrf(Rhino.AddCurve(array(s_pt_1, s_pt_2, s_pt_3)), Array(s_pt_3, shaftLocation))
+					'finalShaftObj = Rhino.JoinSurfacesEx(array(shaftObj, shaftCapObj), True)(0)
+					'engineLine = Rhino.AddLine(array(shaftLocation(0), shaftLocation(1) + 2.675, shaftLocation(2) - 1.550), array(shaftLocation(0) + 100, shaftLocation(1) + 2.675, shaftLocation(2) - 1.550))
+					'Rhino.DeleteObject shaftLine
+					
+				End If
+				
+				If j = 4 Then
+					ReDim Preserve endPtForLoft(UBound(endPtForLoft)-1)
+					ReDim temp_end(0)
+					temp_end(0) = endPtForLoft(0)
+					ReverseCurveFromYAxis strCrv
+					For m = 0 To UBound(strCrv)
+						ReDim Preserve temp_end(UBound(temp_end)+1)
+						temp_end(m + 1) = Rhino.CurveEndPoint(strCrv(m))
+						temp_end(m + 1)(1) = 0
+					Next
+					surfaces(UBound(surfaces)) = Rhino.AddLoftSrf(array(Rhino.AddInterpCurveEx(temp_end), Rhino.AddInterpCurveEx(endPtForLoft)), , , 3, 0)(0)
+				Else
+					surfaces(UBound(surfaces)) = Rhino.AddLoftSrf(strCrv, , , 3, 0)(0)
+				End If
+				ReDim Preserve surfaces(UBound(surfaces) + 1)
+				ReDim strCrv(0)
+				j = j + 1
+				n = n + 1
+			End If
+			
+		Wend
+		Dim s, s_m, trans
+		s = Rhino.JoinCurves(stern, True)(0)
+		s_m = Rhino.MirrorObject(s, Rhino.WorldZXPlane, True)
+		
+		trans = Rhino.AddLoftSrf(array(s, s_m), , , 3, 0)(0)
+		CreateLayerAndMoveObject "Transom", trans
+		ReDim Preserve surfaces(UBound(surfaces) - 1)
+		
+		Dim hull_half_1, hull_half_2, hull
+		hull_half_1 = Rhino.JoinSurfaces(surfaces, True)
+		hull_half_2 = Rhino.MirrorObject(hull_half_1, Rhino.WorldZXPlane, True)
+		
+		hull = Rhino.JoinSurfacesEx(array(hull_half_1, hull_half_2), True)(0)
+		CreateLayerAndMoveObject "Hull", hull
+		
+		''''' Add Hub
+		Point_5 = Rhino.CurveBrepIntersect(Point_5_line, hull)
+		Rhino.DeleteObject Point_5_line
+		shaftLocation = Rhino.PointCoordinates(Point_5(0)) 's06_PropKeelClearance +(0.5 * Point_5 - s06_PropKeelClearance) / (p112_PropHullClearancePct + 1.0)
+		shaftLocation(0) = 4.130
+		shaftLocation(1) = 0	
+
+		Rhino.DeleteObjects Point_5
+		Rhino.AddPoint shaftLocation
+		shaftObj = CreateAndExtrudeCircleYZ(shaftLocation, 0.675, 50)
+		s_pt_1 = array(shaftLocation(0), shaftLocation(1), shaftLocation(2) - 0.675)
+		s_pt_2 = array(shaftLocation(0) - 0.410, shaftLocation(1), shaftLocation(2) - 0.675)
+		s_pt_3 = array(shaftLocation(0) - 0.410, shaftLocation(1), shaftLocation(2))
+		shaftCapObj = Rhino.AddRevSrf(Rhino.AddCurve(array(s_pt_1, s_pt_2, s_pt_3)), Array(s_pt_3, shaftLocation))
+		finalShaftObj = Rhino.JoinSurfacesEx(array(shaftObj, shaftCapObj), True)(0)
+		engineLine = Rhino.AddLine(array(shaftLocation(0), shaftLocation(1) + 2.675, shaftLocation(2) - 1.550), array(shaftLocation(0) + 100, shaftLocation(1) + 2.675, shaftLocation(2) - 1.550))
+		meshRefLine = Rhino.AddLine(array(6.220, 0, shaftLocation(2) + 0.5), array(6.220, 0, 100))
+		TransomHeight = Rhino.PointCoordinates(TransomHeight_PT)
+		
+		'''' Doing hub cutting 
+		Dim hub:hub = Rhino.SplitBrep(finalShaftObj, hull, True)
+		Dim shaft_hull:shaft_hull = Rhino.SplitBrep(hull, hub(0), True)
+		Rhino.DeleteObjects array(hub(1), shaft_hull(1))
+		
+		CreateLayerAndMoveObject "Hub", hub(0)
+		
+		hull = shaft_hull(0) 'Rhino.JoinSurfacesEx(hub(0), shaft_hull(0), True)
+		
+		'''''' Getting physical parameters
+		EngineAftmostPosition = Rhino.PointCoordinates(Rhino.CurveBrepIntersect(engineLine, hull)(0))		
+		meshRefinePT = Rhino.PointCoordinates(Rhino.CurveBrepIntersect(meshRefLine, hull)(0))
+		BaselineToHullAtAP_PT = Rhino.PointCoordinates(Rhino.CurveBrepIntersect(Rhino.AddLine(array(0, 0, 0), array(0, 0, 100)), hull)(0))
+		BaselineToHullAtAP = BaselineToHullAtAP_PT(2)
+		
+
+		hull_parts = Rhino.CopyObjects(array(hull, hub(0), trans))
+		joined_hull_parts = Rhino.JoinSurfacesEx(hull_parts)(0)
+		
+		Volume_Beam_LCB = CalculateHullVolumeBeamAtDraft(joined_hull_parts, 15)
+		Volume = Volume_Beam_LCB(0)
+		LCB = Volume_Beam_LCB(1)
+		Beam = Volume_Beam_LCB(2)
+		
+		Rhino.DeleteObject joined_hull_parts
+		Rhino.DeleteObjects hull_parts
+		
+		pyhsicalParas = array(meshRefinePT(0), meshRefinePT(1), meshRefinePT(2), EngineAftmostPosition(0), EngineAftmostPosition(1), EngineAftmostPosition(2), BaselineToHullAtAP, TransomHeight(2), shaftLocation(2), Beam, Volume, LCB)
+		all_pyhsicalParas(UBound(all_pyhsicalParas)) = pyhsicalParas
+		ReDim Preserve all_pyhsicalParas(UBound(all_pyhsicalParas)+1)
+		pyhsicalParas_str = array("meshRefinePT_x", "meshRefinePT_y", "meshRefinePT_z", "EngineAftmostPosition_x", "EngineAftmostPosition_y", "EngineAftmostPosition_z", "BaselineToHullAtAP", "TransomHeight", "Shaft Height", "Beam", "Volume", "LCB")
+		pyhsicalParas_fileLoc = "H:\152 DM-BAR tanker optimisation - General\C- Naval Arch\Dimension Reduction\samples for CFD\physical paras\physical_paras_" & Cstr(desNo) & ".csv"
+		WriteToCSV pyhsicalParas_str, pyhsicalParas, pyhsicalParas_fileLoc
+		
+		Rhino.Command("_SelCrv _Delete")
+		' this is the code for the Middle and foward part
+		'Dim isCaped
+		'hullForCap = Rhino.JoinSurfacesEx(array(hull_half_1, hull_half_2), Fal)(0)
+		'isCaped = Rhino.CapPlanarHoles(hull)
+		'If isCaped = False Then 
+		hullEdges = Rhino.DuplicateEdgeCurves(hull)
+		deckLine = GetXYPlanarCurves(hullEdges)
+		Rhino.DeleteObjects hullEdges
+		deckLine = Rhino.JoinCurves(deckLine)(0)
+		hullDeck = Rhino.AddLoftSrf(array(deckLine, Rhino.MirrorObject(deckLine, Rhino.WorldZXPlane, True)), , , 3, 0)
+		CreateLayerAndMoveObject "Deck", hullDeck
+		Rhino.Command("_SelCrv _Delete")
+		Rhino.Command("_SelPt _Delete")
+		
+		Rhino.Command("_SelAll _Join")
+		Rhino.Command("!-_Export " & Chr(34) & "H:\152 DM-BAR tanker optimisation - General\C- Naval Arch\Dimension Reduction\samples for CFD\design x_t\sample_" & Cstr(desNo) & ".x_t" & Chr(34) & " _Enter _Enter")
+		Rhino.Command("!-_Export " & Chr(34) & "H:\152 DM-BAR tanker optimisation - General\C- Naval Arch\Dimension Reduction\samples for CFD\design igs\sample_" & Cstr(desNo) & ".igs" & Chr(34) & " _Enter _Enter")
+		'Rhino.Command("_SelAll _Join _Enter")
+		'End If
+		'Dim joinedHull, arrMP
+		'joinedHull = Rhino.JoinSurfacesEx(array(hull, hub(0), hullDeck(0), trans))(0)
+		'arrMP = Rhino.SurfaceVolume(joinedHull)
+		'Rhino.Print "The Hull volume is: " & CStr(arrMP(0))
+		'Rhino.SelectObject joinedHull
+		'Rhino.command("Volume _Enter")
+	Next
+	ReDim Preserve all_pyhsicalParas(UBound(all_pyhsicalParas)-1)
+	pyhsicalParas_fileLoc = "H:\152 DM-BAR tanker optimisation - General\C- Naval Arch\Dimension Reduction\samples for CFD\physical_parameters_rhino.csv"
+	WriteToCSV pyhsicalParas_str, all_pyhsicalParas, pyhsicalParas_fileLoc
+End Sub
+
+
+'---------------------------------------------------------------
+' Subroutine: ImportPoints
+' Purpose:    Import points from a text file.
+'---------------------------------------------------------------
+Function ImportPoints(strFileName)
+	Dim arrAllPoint()
+	' Prompt the user for a file to import
+	Dim strFilter
+	strFilter = "Text File (*.txt)|*.txt|All Files (*.*)|*.*|"
+	'	strFileName = Rhino.OpenFileName("Open Point File", strFilter)
+	If IsNull(strFileName) Then Exit Function
+ 
+	' The the file system object
+	Dim objFSO, objFile
+	Set objFSO = CreateObject("Scripting.FileSystemObject")
+	' Try opening the text file
+	On Error Resume Next
+	Set objFile = objFSO.OpenTextFile(strFileName, 1)
+	If Err Then
+		MsgBox Err.Description
+		Exit Function
+	End If
+ 
+	Rhino.EnableRedraw False
+ 
+	' Read each line from the file
+	Dim strLine, arrPoint, i
+	i = 0
+	Do While objFile.AtEndOfStream <> True
+		strLine = objFile.ReadLine
+		If Not IsNull(strLine) Then
+			' Remove any double-quote characters
+			strLine = Replace(strLine, Chr(34), , 1)
+			' Convert the string to a 3D point
+			arrPoint = Rhino.Str2Pt(strLine)
+			' Add the point to Rhino
+			If IsArray(arrPoint) Then
+				ReDim Preserve arrAllPoint(i)
+				' AddPoint will add a point object to Rhino
+				'	Rhino.AddPoint arrPoint
+				arrAllPoint(i) = arrPoint
+				i = i + 1
+			End If
+		End If
+	Loop
+ 
+	Rhino.EnableRedraw True
+	objFile.Close
+	Set objFile = Nothing
+	Set objFSO = Nothing
+	
+	ImportPoints = arrAllPoint
+End Function
+
+Function getSegmentedPoints_v2(joinCrv, arrCheckPoint, arrPoints)
+	Dim segPoints(), i
+	ReDim segPoints(3)
+	segPoints(0) = FilterPointsByZ(arrPoints, arrCheckPoint(0))
+	
+	segPoints(1) = PointsBetweenTwoCheckpoints(joinCrv, arrPoints, arrCheckPoint(0), arrCheckPoint(1))
+	
+	segPoints(2) = PointsBetweenTwoCheckpoints(joinCrv, arrPoints, arrCheckPoint(1), arrCheckPoint(2))
+
+	segPoints(3) = FilterPointsByY_less(arrPoints, arrCheckPoint(2))
+	getSegmentedPoints_v2 = segPoints
+End Function
+
+Function getSegmentedPoints(arrPoints)
+	Dim i, j
+	Dim segPoints(), temp_segPoints()
+	ReDim temp_segPoints(0)
+	
+	' For first curve whose points are from 0-18
+	j = 1
+	temp_segPoints(0) = arrPoints(0)
+	For i = 1 To 17 ' if we do any chnage it only happen here 
+		ReDim Preserve temp_segPoints(UBound(temp_segPoints)+1)
+		temp_segPoints(j) = arrPoints(i)
+		j = j + 1
+	Next
+	ReDim segPoints(0)
+	segPoints(0) = temp_segPoints
+	
+	' For second curve whose points are from 18-70
+	ReDim temp_segPoints(0)
+	j = 0
+	For i = 17 To 70' if we do any chnage it only happen here 
+		temp_segPoints(j) = arrPoints(i)
+		ReDim Preserve temp_segPoints(UBound(temp_segPoints)+1)
+		j = j + 1
+	Next	
+	ReDim Preserve temp_segPoints(UBound(temp_segPoints)-1)
+	ReDim Preserve segPoints(UBound(segPoints)+1)
+	segPoints(UBound(segPoints)) = temp_segPoints
+	
+	
+	' For second curve whose points are from 70-82
+	ReDim temp_segPoints(0)
+	j = 0
+	For i = 70 To 99' if we do any chnage it only happen here 
+		temp_segPoints(j) = arrPoints(i)
+		ReDim Preserve temp_segPoints(UBound(temp_segPoints)+1)
+		j = j + 1
+	Next	
+	ReDim Preserve temp_segPoints(UBound(temp_segPoints)-1)
+	ReDim Preserve segPoints(UBound(segPoints)+1)
+	segPoints(UBound(segPoints)) = temp_segPoints
+	
+	
+	' For second curve whose points are from 82-100
+	ReDim temp_segPoints(0)
+	j = 0
+	For i = 99 To 100' if we do any chnage it only happen here 
+		temp_segPoints(j) = arrPoints(i)
+		ReDim Preserve temp_segPoints(UBound(temp_segPoints)+1)
+		j = j + 1
+	Next	
+	ReDim Preserve temp_segPoints(UBound(temp_segPoints)-1)
+	ReDim Preserve segPoints(UBound(segPoints)+1)
+	segPoints(UBound(segPoints)) = temp_segPoints
+	
+	getSegmentedPoints = segPoints
+End Function
+
+Function getSegmentedPoints_50(arrPoints)
+	Dim i, j
+	Dim segPoints(), temp_segPoints()
+	ReDim temp_segPoints(0)
+	
+	' For first curve whose points are from 0-18
+	j = 1
+	temp_segPoints(0) = arrPoints(0)
+	For i = 1 To 9 ' if we do any chnage it only happen here 
+		ReDim Preserve temp_segPoints(UBound(temp_segPoints)+1)
+		temp_segPoints(j) = arrPoints(i)
+		j = j + 1
+	Next
+	ReDim segPoints(0)
+	segPoints(0) = temp_segPoints
+	
+	' For second curve whose points are from 18-70
+	ReDim temp_segPoints(0)
+	j = 0
+	For i = 9 To 37' if we do any chnage it only happen here 
+		temp_segPoints(j) = arrPoints(i)
+		ReDim Preserve temp_segPoints(UBound(temp_segPoints)+1)
+		j = j + 1
+	Next	
+	ReDim Preserve temp_segPoints(UBound(temp_segPoints)-1)
+	ReDim Preserve segPoints(UBound(segPoints)+1)
+	segPoints(UBound(segPoints)) = temp_segPoints
+	
+	
+	' For second curve whose points are from 70-82
+	ReDim temp_segPoints(0)
+	j = 0
+	For i = 37 To 49' if we do any chnage it only happen here 
+		temp_segPoints(j) = arrPoints(i)
+		ReDim Preserve temp_segPoints(UBound(temp_segPoints)+1)
+		j = j + 1
+	Next	
+	ReDim Preserve temp_segPoints(UBound(temp_segPoints)-1)
+	ReDim Preserve segPoints(UBound(segPoints)+1)
+	segPoints(UBound(segPoints)) = temp_segPoints
+	
+	
+	' For second curve whose points are from 82-100
+	ReDim temp_segPoints(0)
+	j = 0
+	For i = 49 To 50' if we do any chnage it only happen here 
+		temp_segPoints(j) = arrPoints(i)
+		ReDim Preserve temp_segPoints(UBound(temp_segPoints)+1)
+		j = j + 1
+	Next	
+	ReDim Preserve temp_segPoints(UBound(temp_segPoints)-1)
+	ReDim Preserve segPoints(UBound(segPoints)+1)
+	segPoints(UBound(segPoints)) = temp_segPoints
+	
+	getSegmentedPoints_50 = segPoints
+End Function
+
+Function FilterPointsByZ(arrPoints, ptCheckpoint)
+	Dim i, arrFiltered(), count, zThreshold, foundMatch
+    
+	' Z coordinate of the checkpoint
+	zThreshold = ptCheckpoint(2)
+    
+	count = -1
+	foundMatch = False
+	For i = 0 To UBound(arrPoints)
+		If arrPoints(i)(2) = zThreshold Then
+			foundMatch = True
+		End If
+        
+		If arrPoints(i)(2) > zThreshold Then
+			count = count + 1
+			ReDim Preserve arrFiltered(count)
+			arrFiltered(count) = arrPoints(i)
+		End If
+	Next
+
+	' If no point with matching Z coordinate was found, add the checkpoint
+	If Not foundMatch Then
+		count = count + 1
+		ReDim Preserve arrFiltered(count)
+		arrFiltered(count) = ptCheckpoint
+	End If
+    
+	FilterPointsByZ = arrFiltered
+End Function
+
+
+
+Function FilterPointsByY_less(arrPoints, ptCheckpoint)
+	Dim i, arrFiltered(), count, zThreshold, foundMatch
+    
+	' Z coordinate of the checkpoint
+	zThreshold = ptCheckpoint(1)
+    
+	count = -1
+	foundMatch = False
+	For i = 0 To UBound(arrPoints)
+		If arrPoints(i)(1) = zThreshold Then
+			foundMatch = True
+		End If
+        
+		If arrPoints(i)(1) < zThreshold Then
+			count = count + 1
+			ReDim Preserve arrFiltered(count)
+			arrFiltered(count) = arrPoints(i)
+		End If
+	Next
+
+	' If no point with matching Z coordinate was found, add the checkpoint
+	If Not foundMatch Then
+		count = count + 1
+		ReDim Preserve arrFiltered(count)
+		For i = count To 1 Step -1
+			arrFiltered(i) = arrFiltered(i - 1)
+		Next
+		arrFiltered(0) = ptCheckpoint
+	End If
+    
+	FilterPointsByY_less = arrFiltered
+End Function
+
+Function FilterPointsByY(arrPoints, ptCheckpoint)
+	Dim i, arrFiltered(), count, zThreshold
+    
+	' Z coordinate of the checkpoint
+	zThreshold = ptCheckpoint(1)
+    
+	count = -1
+	For i = 0 To UBound(arrPoints)
+		If arrPoints(i)(1) >= zThreshold Then
+			count = count + 1
+			ReDim Preserve arrFiltered(count)
+			arrFiltered(count) = arrPoints(i)
+		End If
+	Next
+    
+	FilterPointsByY = arrFiltered
+End Function
+
+Function PointsBetweenCheckpointsZ(arrPoints, ptCheckpoint1, ptCheckpoint2)
+	Dim i, arrFiltered(), count, zMin, zMax, foundMatch1, foundMatch2
+    
+	' Determine the Z range based on the two checkpoints
+	If ptCheckpoint1(2) < ptCheckpoint2(2) Then
+		zMin = ptCheckpoint1(2)
+		zMax = ptCheckpoint2(2)
+	Else
+		zMin = ptCheckpoint2(2)
+		zMax = ptCheckpoint1(2)
+	End If
+    
+	count = -1
+	foundMatch1 = False
+	foundMatch2 = False
+    
+	For i = 0 To UBound(arrPoints)
+		If arrPoints(i)(2) = ptCheckpoint1(2) Then
+			foundMatch1 = True
+		ElseIf arrPoints(i)(2) = ptCheckpoint2(2) Then
+			foundMatch2 = True
+		End If
+
+		If arrPoints(i)(2) > zMin And arrPoints(i)(2) < zMax Then
+			count = count + 1
+			ReDim Preserve arrFiltered(count)
+			arrFiltered(count) = arrPoints(i)
+		End If
+	Next
+
+	' If no point with Z coordinate matching ptCheckpoint1 was found, add it to the beginning
+	If Not foundMatch1 Then
+		count = count + 1
+		ReDim Preserve arrFiltered(count)
+		For i = count To 1 Step -1
+			arrFiltered(i) = arrFiltered(i - 1)
+		Next
+		arrFiltered(0) = ptCheckpoint1
+	End If
+
+	' If no point with Z coordinate matching ptCheckpoint2 was found, add it to the end
+	If Not foundMatch2 Then
+		count = count + 1
+		ReDim Preserve arrFiltered(count)
+		arrFiltered(count) = ptCheckpoint2
+	End If
+    
+	PointsBetweenCheckpointsZ = arrFiltered
+End Function
+
+
+Function PointsBetweenCheckpointsY(arrPoints, ptCheckpoint1, ptCheckpoint2)
+	Dim i, arrFiltered(), count, zMin, zMax, foundMatch1, foundMatch2
+    
+	' Determine the Z range based on the two checkpoints
+	If ptCheckpoint1(1) < ptCheckpoint2(1) Then
+		zMin = ptCheckpoint1(1)
+		zMax = ptCheckpoint2(1)
+	Else
+		zMin = ptCheckpoint2(1)
+		zMax = ptCheckpoint1(1)
+	End If
+    
+	count = -1
+	foundMatch1 = False
+	foundMatch2 = False
+    
+	For i = 0 To UBound(arrPoints)
+		If arrPoints(i)(1) = ptCheckpoint1(1) Then
+			foundMatch1 = True
+		ElseIf arrPoints(i)(1) = ptCheckpoint2(1) Then
+			foundMatch2 = True
+		End If
+
+		If arrPoints(i)(1) > zMin And arrPoints(i)(1) < zMax Then
+			count = count + 1
+			ReDim Preserve arrFiltered(count)
+			arrFiltered(count) = arrPoints(i)
+		End If
+	Next
+
+	' If no point with Z coordinate matching ptCheckpoint1 was found, add it to the beginning
+	If Not foundMatch1 Then
+		count = count + 1
+		ReDim Preserve arrFiltered(count)
+		For i = count To 1 Step -1
+			arrFiltered(i) = arrFiltered(i - 1)
+		Next
+		arrFiltered(0) = ptCheckpoint1
+	End If
+
+	' If no point with Z coordinate matching ptCheckpoint2 was found, add it to the end
+	If Not foundMatch2 Then
+		count = count + 1
+		ReDim Preserve arrFiltered(count)
+		arrFiltered(count) = ptCheckpoint2
+	End If
+    
+	PointsBetweenCheckpointsY = arrFiltered
+End Function
+
+Function ReverseCurveFromYAxis(arrCurves)
+	Dim i, ptStart, ptEnd
+    
+	For i = 0 To UBound(arrCurves)
+		ptStart = Rhino.CurveStartPoint(arrCurves(i))
+		ptEnd = Rhino.CurveEndPoint(arrCurves(i))
+        
+		' Check if the curve is facing upwards based on Z-values
+		If ptStart(1) < ptEnd(1) Then 
+			' If the curve is facing upwards, reverse the curve
+			Rhino.ReverseCurve arrCurves(i)
+		End If
+	Next
+End Function
+
+
+Function PointsBetweenTwoCheckpoints(strCurve, arrPoints, ptCheckpoint1, ptCheckpoint2)
+	Dim i, arrFiltered(), count, curveParamCheckpoint1, curveParamCheckpoint2, curveParamPoint, foundMatch1, foundMatch2
+	Dim dblDistance_1, dblDistance_2
+	' Get the parameter of the checkpoints on the curve
+	curveParamCheckpoint1 = Rhino.CurveClosestPoint(strCurve, ptCheckpoint1)
+	curveParamCheckpoint2 = Rhino.CurveClosestPoint(strCurve, ptCheckpoint2)
+    
+	count = -1
+	foundMatch1 = False
+	foundMatch2 = False
+    
+	For i = 0 To UBound(arrPoints)
+		' Get the parameter of the current point on the curve
+		curveParamPoint = Rhino.CurveClosestPoint(strCurve, arrPoints(i))
+        
+		dblDistance_1 = Rhino.Distance(arrPoints(i), ptCheckpoint1)
+		dblDistance_2 = Rhino.Distance(arrPoints(i), ptCheckpoint2)
+
+		' Check if the current point matches the checkpoints
+		If dblDistance_1 = 0 Then
+			foundMatch1 = True
+		ElseIf dblDistance_2 = 0 Then
+			foundMatch2 = True
+		End If
+
+		' If the point's parameter is between the checkpoints' parameters, add it to the result
+		If curveParamPoint > curveParamCheckpoint1 And curveParamPoint < curveParamCheckpoint2 Then
+			count = count + 1
+			ReDim Preserve arrFiltered(count)
+			arrFiltered(count) = arrPoints(i)
+		End If
+	Next
+
+	' If checkpoint1 was not found in the list, add it to the beginning
+	If Not foundMatch1 Then
+		count = count + 1
+		ReDim Preserve arrFiltered(count)
+		For i = count To 1 Step -1
+			arrFiltered(i) = arrFiltered(i - 1)
+		Next
+		arrFiltered(0) = ptCheckpoint1
+	End If
+
+	' If checkpoint2 was not found in the list, add it to the end
+	If Not foundMatch2 Then
+		count = count + 1
+		ReDim Preserve arrFiltered(count)
+		arrFiltered(count) = ptCheckpoint2
+	End If
+    
+	PointsBetweenTwoCheckpoints = arrFiltered
+End Function
+
+
+Function GetXYPlanarCurves(arrCurves)
+	Dim i, ptStart, ptEnd, zDiff, arrFilteredCurves(), count, tolerance
+
+	tolerance = 0.01 ' Default tolerance; can be adjusted
+
+	count = -1
+	For i = 0 To UBound(arrCurves)
+		ptStart = Rhino.CurveStartPoint(arrCurves(i))
+		ptEnd = Rhino.CurveEndPoint(arrCurves(i))
+        
+		zDiff = Abs(ptStart(2) - ptEnd(2))
+
+		If zDiff <= tolerance And ptStart(2) > 22.5 And ptEnd(2) > 22.5 And ptStart(1) >= 0 And ptEnd(1) >= 0 Then
+			count = count + 1
+			ReDim Preserve arrFilteredCurves(count)
+			arrFilteredCurves(count) = Rhino.CopyObject(arrCurves(i))
+		End If
+	Next
+    
+	GetXYPlanarCurves = arrFilteredCurves
+End Function
+
+Function createPoints(arrPoints)
+	Dim i 
+	For i = 0 To UBound(arrPoints)
+		Rhino.AddPoint arrPoints(i)
+	Next
+End Function
+
+'Function that returns the first intersection point in the Z-axis between two curves
+Function FirstZIntersection(curve1, curve2)
+	Dim arrParams, arrIntersections(), i, j, minZ, firstZPointIndex
+    
+	'Get intersection parameters between the two curves
+	arrParams = Rhino.CurveCurveIntersection(curve1, curve2)
+    
+	'If there are no intersections, return nothing
+	If IsNull(arrParams) Then
+		Rhino.Print "No intersections found"
+		Exit Function
+	End If
+    
+	'Extract the 3D intersection points
+	ReDim arrIntersections(Ubound(arrParams))
+	For i = 0 To Ubound(arrParams)
+		arrIntersections(i) = arrParams(i, 1)
+	Next
+    
+	'Find the intersection point with the smallest Z value
+	minZ = arrIntersections(0)(2)
+	firstZPointIndex = 0
+	For i = 1 To Ubound(arrIntersections)
+		If arrIntersections(i)(2) < minZ Then
+			minZ = arrIntersections(i)(2)
+			firstZPointIndex = i
+		End If
+	Next
+    
+	'Return the first intersection point in Z-axis
+	FirstZIntersection = arrIntersections(firstZPointIndex)
+End Function
+
+'Function to create a circle on the YZ plane and extrude it in the X direction
+Function CreateAndExtrudeCircleYZ(ptCenter, dblRadius, dblExtrudeDistance)
+	Dim strCircle, strExtrudedCircle, vecExtrudeDirection, plnYZ
+    
+	'Create a YZ plane at the specified center
+	plnYZ = Rhino.PlaneFromNormal(ptCenter, Array(1, 0, 0))
+    
+	'Create a circle on the YZ plane
+	strCircle = Rhino.AddCircle(plnYZ, dblRadius)
+    
+	'Define the extrusion direction vector
+	vecExtrudeDirection = Rhino.VectorCreate(Array(dblExtrudeDistance, 0, 0), Array(0, 0, 0))
+    
+	'Extrude the circle in the X direction
+	strExtrudedCircle = Rhino.ExtrudeCurveStraight(strCircle, Array(0, 0, 0), vecExtrudeDirection)
+    
+	'Delete the original circle (optional)
+	Rhino.DeleteObject strCircle
+    
+	'Return the ID of the extruded surface
+	CreateAndExtrudeCircleYZ = strExtrudedCircle
+End Function
+
+' Function to find the point with the highest Z value from a list of point GUIDs
+Function FindAndKeepTopmostPointGUID(arrPointGUIDs)
+	Dim maxZ, topmostPointGUID, i, currentPoint
+    
+	maxZ = -1E20 ' Start with a very small number
+	topmostPointGUID = "" ' Initialize to an empty string
+    
+	For i = 0 To UBound(arrPointGUIDs)
+		' Get the point coordinates from its GUID
+		currentPoint = Rhino.PointCoordinates(arrPointGUIDs(i))
+        
+		' Check if the current point's Z value is greater than maxZ
+		If currentPoint(2) > maxZ Then
+			' If a previous topmost point was found, delete it
+			If topmostPointGUID <> "" Then
+				Rhino.DeleteObject topmostPointGUID
+			End If
+            
+			maxZ = currentPoint(2)
+			topmostPointGUID = arrPointGUIDs(i)
+		Else
+			' If the current point is not the topmost, delete it
+			Rhino.DeleteObject arrPointGUIDs(i)
+		End If
+	Next
+    
+	FindAndKeepTopmostPointGUID = topmostPointGUID
+End Function
+
+Function CalculateHullVolumeBeamAtDraft(strHull, dblDraft)
+	Dim strSplitSurfaces, strSubmergedHull, ptBase, plnDraft, arrBoundingBox, Beam_PT, Beam
+    
+	' Create a plane at the desired draft height
+	plnDraft = Rhino.AddCutPlane(strHull, array(-100, 0, dblDraft), array(200, 0, dblDraft), array(0, 1, 0))
+	    
+	' Split the hull with the plane
+	strSplitSurfaces = Rhino.SplitBrep(strHull, plnDraft)
+	If IsNull(strSplitSurfaces) Then Exit Function
+    
+	' Identify which part of the split hull is below the draft plane (submerged part)
+	Dim i, ptTest, blnIsBelow
+	For i = 0 To UBound(strSplitSurfaces)
+		ptTest = Rhino.SurfaceAreaCentroid(strSplitSurfaces(i))(0)
+		If ptTest(2) < dblDraft Then
+			strSubmergedHull = strSplitSurfaces(i)
+			Exit For
+		End If
+	Next
+	Rhino.CapPlanarHoles strSubmergedHull
+	
+	Beam_PT = Rhino.AddPoint(Rhino.BoundingBox(strSubmergedHull)(0))
+	Beam = abs(Rhino.BoundingBox(strSubmergedHull)(0)(1)) * 2
+	
+	' Calculate the volume and centroid of the submerged portion
+	Dim dblVolume, arrCentroid
+	dblVolume = Rhino.SurfaceVolume(strSubmergedHull)
+	arrCentroid = Rhino.SurfaceVolumeCentroid(strSubmergedHull)
+	
+	' Cleanup: Remove the split surfaces
+	Rhino.DeleteObjects strSplitSurfaces
+	Rhino.DeleteObject plnDraft
+	
+	Dim results(2)
+	results(0) = dblVolume(0)
+	results(1) = arrCentroid(0)(0)
+	results(2) = Beam
+	
+	' Return the volume
+	CalculateHullVolumeBeamAtDraft = results
+End Function
+
+
+' Function to write an array of strings and their numeric values to a .csv file
+Function WriteToCSV(arrStrings, arrValues, strLocation)
+	Dim fso, fileStream, i, j, strData, is2D
+
+	' Determine if arrValues is 1D or 2D
+	On Error Resume Next
+	is2D = arrValues(0)(0)
+	On Error GoTo 0
+
+	' Check if the size matches between arrStrings and arrValues
+	If IsEmpty(is2D) Then
+		If UBound(arrStrings) <> UBound(arrValues) Then
+			Rhino.Print "Error: The arrays are not of the same length."
+			Exit Function
+		End If
+	Else
+		If UBound(arrStrings) <> UBound(arrValues(0)) Then
+			Rhino.Print "Error: The number of column names does not match the number of columns in arrValues."
+			Exit Function
+		End If
+	End If
+
+	' Create a FileSystemObject
+	Set fso = CreateObject("Scripting.FileSystemObject")
+	' Open the file for writing
+	Set fileStream = fso.CreateTextFile(strLocation, True)
+
+	' Write the column names (from arrStrings)
+	For i = 0 To UBound(arrStrings) - 1
+		strData = strData & arrStrings(i) & ","
+	Next
+	strData = strData & arrStrings(UBound(arrStrings))
+	fileStream.WriteLine(strData)
+
+	' Write data based on dimensionality
+	If IsEmpty(is2D) Then
+		' Write the single row from 1D arrValues
+		strData = ""
+		For i = 0 To UBound(arrValues) - 1
+			strData = strData & arrValues(i) & ","
+		Next
+		strData = strData & arrValues(UBound(arrValues))
+		fileStream.WriteLine(strData)
+	Else
+		' Write each row from 2D arrValues
+		For i = 0 To UBound(arrValues, 1)
+			strData = ""
+			For j = 0 To UBound(arrValues(0)) - 1
+				strData = strData & arrValues(i)(j) & ","
+			Next
+			strData = strData & arrValues(i)(UBound(arrValues(0)))
+			fileStream.WriteLine(strData)
+		Next
+		
+		
+	End If
+
+	' Close the file
+	fileStream.Close
+
+	Set fileStream = Nothing
+	Set fso = Nothing
+
+	Rhino.Print "Data written to " & strLocation
+End Function
+
+
+
+Function CreateLayerAndMoveObject(strLayerName, strObjectGUID)
+	Dim strLayer
+    
+	' Check if layer already exists
+	strLayer = Rhino.LayerId(strLayerName)
+	If IsNull(strLayer) Then
+		' If not, create the new layer
+		strLayer = Rhino.AddLayer(strLayerName)
+		If IsNull(strLayer) Then
+			Rhino.Print "Error creating new layer."
+			Exit Function
+		End If
+	End If
+    
+	' Move the object to the new layer
+	Rhino.ObjectLayer strObjectGUID, strLayerName
+    
+	Rhino.Print "Object moved to layer: " & strLayerName
+End Function

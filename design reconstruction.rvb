@@ -1,0 +1,141 @@
+Option Explicit
+'Script written by <insert name>
+'Script copyrighted by <insert company name>
+'Script version 21 August 2022 16:21:50
+
+Call Main()
+Sub Main()
+	Dim strPlanes_(), BP, finalBPs(),maxEl, finalBPsPoints(),DoICreteFile
+	Dim arrBox, strHull, Lwl, beam, draft, i, j, dupCps, arrBPstartPT, arrBPendPT, dblLength,blnCompare, N
+
+	Dim iterations
+	For iterations = 1 To 1
+		Rhino.Command("SelAll")
+		Rhino.Command("Delete")
+		Rhino.Command("-SaveAs " & Chr(34) & "H:\152 DM-BAR tanker optimisation - General\C- Naval Arch\Dimension Reduction\design reconstrcution\tempCreation_divideCurve.3dm" & Chr(34) & " Enter")
+	
+		Dim filePathName:filePathName = Chr(34) & "H:\152 DM-BAR tanker optimisation - General\C- Naval Arch\Dimension Reduction\design_" & Cstr(iterations) & ".3dm" & Chr(34)
+		Call Rhino.Command("_-Open " & filePathName, 0)
+		Rhino.UnitSystem  2, True
+		N = 20
+
+		' There are 'numBP' planes and each plane have 'numWL' points
+		Rhino.Command("SelCrv")
+		Rhino.Command("Delete")
+		Rhino.Command("SelNone")
+		Rhino.command("SelAll")
+		strHull = Rhino.SelectedObjects()(0)'Rhino.ObjectsByType(16, True)(0)
+
+		arrBox = Rhino.BoundingBox(strHull)
+		Rhino.MoveObject strHull, arrBox(5), array(0, 0, 0)
+	
+		arrBox = Rhino.BoundingBox(strHull)
+		Lwl = abs(arrBox(4)(0) - arrBox(5)(0))
+		draft = abs(arrBox(0)(2) - arrBox(4)(2))
+		beam = abs(arrBox(0)(1) - arrBox(2)(1))
+	
+		'Scaling the object
+		Rhino.ScaleObject strHull, array(0, 0, 0), array(100 / Lwl, 16.1 / beam, 10.8 / draft), False	
+	
+		Rhino.Command("SelNone")
+	
+		filePathName = Chr(34) & "H:\152 DM-BAR tanker optimisation - General\C- Naval Arch\Dimension Reduction\planes_1.3dm" & Chr(34)
+		Call Rhino.Command("_-Import " & filePathName & " _Enter", 0)
+
+		Dim strPlanes:strPlanes = Rhino.SelectedObjects()
+		Rhino.Command("SelNone")
+		Rhino.Command("_Zoom _Extents")
+	
+		DoICreteFile = 1
+		ReDim Preserve strPlanes_(UBound(strPlanes))
+		ReDim Preserve finalBPs(UBound(strPlanes))
+		ReDim Preserve finalBPsPoints(UBound(strPlanes))
+
+		Dim secNo:secNo = array(0, 13, 1, 2, 4, 3, 5, 6, 7, 8, 9, 10, 11, 12, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14)
+		For i = 0 To UBound(strPlanes)
+			strPlanes_(i) = strPlanes(secNo(i))		
+		Next
+		strPlanes = strPlanes_
+	
+		For i = 0 To UBound(strPlanes)
+			BP = Rhino.IntersectBreps(strHull, strPlanes(i))
+			If isNull(BP) Then ' if there is no intersection at any section of the hull
+				'Rhino.MessageBox "There is no Intersection!"
+				DoICreteFile = 0
+				Exit For
+			End If
+			If UBound(BP) > 0 And i < 27 Then ' there are two curves in the forward section of the hull
+				'Rhino.MessageBox "More than one curve is resulted after intersection!"
+				DoICreteFile = 0
+				Exit For
+			Else
+				If UBound(BP) > 0 Then
+					maxEl = 0
+					For j = 0 To UBound(BP)
+						dblLength = Rhino.CurveLength(BP(j))
+						If maxEl < dblLength Then
+							maxEl = dblLength
+							finalBPs(i) = BP(j)
+						End If
+					Next
+					If i > 0 Then ' checking the direction of the curve
+						blnCompare = Rhino.CurveDirectionsMatch(finalBPs(i - 1), finalBPs(i))
+						If blnCompare = False Then
+							Rhino.ReverseCurve finalBPs(i)
+						End If
+					End If
+					finalBPsPoints(i) = Rhino.DivideCurve(finalBPs(i), N)
+					'rhino.AddPoints finalBPsPoints(i)
+				Else
+					finalBPs(i) = BP(0)
+					If i > 0 Then ' checking the direction of the curve
+						blnCompare = Rhino.CurveDirectionsMatch(finalBPs(i - 1), finalBPs(i))
+						If blnCompare = False Then
+							Rhino.ReverseCurve finalBPs(i)
+						End If
+					End If
+					finalBPsPoints(i) = Rhino.DivideCurve(finalBPs(i), N)
+					'rhino.AddPoints finalBPsPoints(i)
+				End If
+			End If
+			'Rhino.SelectObject(finalBPs(i))
+		Next
+	
+		If DoICreteFile = 1 Then
+			'Saving points to a file
+			'Get the file system object
+			Dim objFSO, objStream
+			Set objFSO = CreateObject("Scripting.FileSystemObject")
+
+			' Open a text file to write to
+			On Error Resume Next
+			Set objStream = objFSO.CreateTextFile("H:\152 DM-BAR tanker optimisation - General\C- Naval Arch\Dimension Reduction\design reconstrcution\design_" & CStr(iterations) & ".txt", True)
+			If Err Then
+				MsgBox Err.Description
+				Exit Sub
+			End If
+
+			' Write each point as text to the file
+			Dim strPoint, strText
+			For i = 0 To UBound(finalBPsPoints)
+				For Each strPoint In finalBPsPoints(i)
+					strText = Rhino.Pt2Str(strPoint)
+					objStream.WriteLine(strText)
+				Next
+			Next
+		Else
+			DoICreteFile = 1
+		End If
+		
+		Dim objStream_LBT
+		Set objStream_LBT = CreateObject("ADODB.Stream")
+		objStream_LBT.CharSet = "utf-8"
+		objStream_LBT.Open
+		objStream_LBT.WriteText CStr(Lwl / 1000) & vbCrLf
+		objStream_LBT.WriteText CStr(beam / 1000) & vbCrLf
+		objStream_LBT.WriteText CStr(draft / 1000)
+		objStream_LBT.SaveToFile "H:\152 DM-BAR tanker optimisation - General\C- Naval Arch\Dimension Reduction\design reconstrcution\LBTs\LBT_" & CStr(iterations) & ".txt", 2
+		
+		Rhino.Command("_ClearUndo")
+	Next
+End Sub

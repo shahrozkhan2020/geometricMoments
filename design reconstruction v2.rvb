@@ -1,0 +1,556 @@
+Option Explicit
+'Script written by <insert name>
+'Script copyrighted by <insert company name>
+'Script version 29 August 2023 12:42:48
+
+Call Main()
+Sub Main()
+	Dim numOfCurveDivPoints:numOfCurveDivPoints = 100
+	Dim strHull, arrBox, Lwl, draft, beam, p1, p2, p3, i,j, arrParameter, patch_1(), patch_2(),patch_3(),patch_4(), s1, s2,s3, edgeCurves, temp_pts, patch_1234()
+	Dim temp_end, temp_start, test_pt, crvForPartStern, crvForPartStern_2, crvForPartStern_3, cutterLocation, edgePoint, doFlip
+	Dim deckLines(), deckLines_, splitDeckLines, interPT, l1, l2, deckLine, deckPoints, supportLine, supportPTS, supportLength, supportPoints
+	Dim sectionsAtForward(), sectionsAtMiddleBody, sectionsAtAft(), sectionsAtAft_segmented(), tempSet()
+	Dim pointsAtForward(),pointsAtMiddleBody(), pointsAtAft()
+	doFlip = False
+	
+	Dim iterations
+	For iterations = 6 To 6
+
+		Rhino.Command("SelAll")
+		Rhino.Command("Delete")
+		Rhino.Command("-SaveAs " & Chr(34) & "H:\152 DM-BAR tanker optimisation - General\C- Naval Arch\Dimension Reduction\design reconstrcution\tempCreation_divideCurve.3dm" & Chr(34) & " Enter")
+		Dim filePathName:filePathName = Chr(34) & "H:\152 DM-BAR tanker optimisation - General\C- Naval Arch\Dimension Reduction\design_" & Cstr(iterations) & ".3dm" & Chr(34)
+		Call Rhino.Command("_-Open " & filePathName, 0)
+
+		Rhino.Command "-_MaxViewport", 0 ' 0 means no echo
+		
+		
+		strHull = Rhino.ObjectsByType(16, False)(0)
+
+		arrBox = Rhino.BoundingBox(strHull)
+		Lwl = abs(arrBox(4)(0) - arrBox(5)(0))
+		draft = abs(arrBox(0)(2) - arrBox(4)(2))
+		beam = abs(arrBox(0)(1) - arrBox(2)(1))
+	
+		p3 = array(arrBox(4), array(Lwl * 0.05, arrBox(4)(1), arrBox(4)(2)))
+		p2 = array(array(Lwl * 0.05, arrBox(4)(1), arrBox(4)(2)), array(Lwl * 0.9, arrBox(4)(1), arrBox(4)(2)))
+		p1 = array(array(Lwl * 0.9, arrBox(4)(1), arrBox(4)(2)), array(arrBox(5)(0), arrBox(4)(1), arrBox(4)(2)))
+		
+		'Rhino.AddLine p3(0), p3(1)
+		'Rhino.AddLine p2(0), p2(1)
+		'Rhino.AddLine p1(0), p1(1)
+		s1 = Rhino.AddCutPlane(strHull, p3(1), array(p3(1)(0), 0, 0), array(0, 1, 0))
+		s2 = Rhino.AddCutPlane(strHull, p1(0), array(p1(0)(0), 0, 0), array(0, 1, 0))
+		
+		'+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+		'+++++++++++++++ Forward Part ++++++++++++++++++++++++++++++++++++++
+		'+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+		
+		'''' from the he code is for deck """""""""""""""""""""""""""""""""""""""
+		ReDim deckLines(0)
+		edgeCurves = Rhino.DuplicateEdgeCurves(strHull, False)
+		For i = 0 To UBound(edgeCurves)
+			temp_end = Rhino.CurveEndPoint(edgeCurves(i))
+			temp_start = Rhino.CurveStartPoint(edgeCurves(i))
+			If abs(temp_end(2) - p1(1)(2)) < 0.00001 And abs(temp_start(2) - p1(1)(2)) < 0.00001 Then
+				deckLines(UBound(deckLines)) = Rhino.CopyObject(edgeCurves(i))
+				ReDim Preserve deckLines(UBound(deckLines)+1)
+			End If
+		Next
+		ReDim Preserve deckLines(UBound(deckLines)-1)
+		deckLines_ = Rhino.JoinCurves(deckLines, True)(0)
+		
+		interPT = Rhino.CurveSurfaceIntersection(deckLines_, s2)
+		splitDeckLines = Rhino.SplitCurve(deckLines_, interPT(0, 6), True)
+		l1 = Rhino.CurveLength(splitDeckLines(0))
+		l2 = Rhino.CurveLength(splitDeckLines(1))
+		If l1 < l2 Then 
+			deckLine = Rhino.CopyObject(splitDeckLines(0))
+		Else
+			deckLine = Rhino.CopyObject(splitDeckLines(1))
+		End If
+		Rhino.DeleteObjects edgeCurves
+		Rhino.DeleteObjects splitDeckLines
+		ReDim supportPTS(1)
+
+		temp_end = Rhino.CurveEndPoint(deckLine)
+		temp_start = Rhino.CurveStartPoint(deckLine)
+		If temp_start(0) > temp_end(0) Then
+			supportPTS(0) = temp_start
+			supportPTS(1) = array(temp_end(0), temp_start(1), temp_start(2))
+		Else
+			supportPTS(0) = temp_end
+			supportPTS(1) = array(temp_start(0), temp_end(1), temp_end(2))
+		End If
+	
+		supportLength = abs(supportPTS(1)(0) - supportPTS(0)(0))
+		supportLine = Rhino.AddLine(supportPTS(1), array(supportPTS(1)(0) + (supportLength / 3), supportPTS(0)(1), supportPTS(0)(2)))
+
+		If temp_start(0) > temp_end(0) Then
+			Rhino.ReverseCurve deckLine
+			doFlip = True
+		End If
+		
+		deckPoints = Rhino.DivideCurve(deckLine, 20)
+		supportPoints = Rhino.DivideCurve(supportLine, 20)
+		Rhino.DeleteObjects array(supportLine, deckLine)
+		
+		ReDim sectionsAtForward(0)
+		For i = 1 To UBound(deckPoints)
+			l1 = Rhino.ExtendCurveLength(Rhino.AddLine(deckPoints(i), supportPoints(i)), 0, 0, 20)
+			l2 = Rhino.AddLine(deckPoints(i), array(deckPoints(i)(0), deckPoints(i)(1), -10))
+			s3 = Rhino.ExtrudeCurve(l1, l2)
+			sectionsAtForward(UBound(sectionsAtForward)) = Rhino.IntersectBreps(strHull, s3)(0)
+			ReDim Preserve sectionsAtForward(UBound(sectionsAtForward)+1)
+			Rhino.DeleteObjects array(s3, l1, l2)
+		Next
+		ReDim Preserve sectionsAtForward(UBound(sectionsAtForward)-1)
+		''''"""""""""""""""""""""""""""""""""""""""
+		
+		'+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+		'+++++++++++++++ Aft Part ++++++++++++++++++++++++++++++++++++++
+		'+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+		
+		Dim s1_split:s1_split = Rhino.SplitBrep(strHull, s1, True)
+
+		Rhino.DeleteObject(s1)
+	
+		Dim exp_s1_split:exp_s1_split = Rhino.ExplodePolysurfaces(s1_split(0), True)
+		If doFlip = True Then
+			For i = 0 To UBound(exp_s1_split)
+				Rhino.FlipSurface exp_s1_split(i), True
+			Next
+			doFlip = False
+		End If
+		
+		If UBound(exp_s1_split) = 4 Then
+			
+			'------------------------------------------------------------------
+			edgeCurves = Rhino.DuplicateEdgeCurves(exp_s1_split(1), False)
+			ReDim Preserve patch_1(0)
+			' To select the top curve of this patch
+			Dim lastCurve
+			For i = 0 To Ubound(edgeCurves)
+				temp_end = Rhino.CurveEndPoint(edgeCurves(i))
+				temp_start = Rhino.CurveStartPoint(edgeCurves(i))	
+				If temp_end(2) > 4 And temp_start(2) > 4 And abs(temp_end(0) - temp_start(0)) > 5 Then
+					temp_pts = Rhino.DivideCurve(edgeCurves(i), 20)
+					If Rhino.CurveStartPoint(edgeCurves(2))(0) > Rhino.CurveEndPoint(edgeCurves(2))(0) Then
+						test_pt = Rhino.CurveEndPoint(edgeCurves(i))
+					Else
+						test_pt = Rhino.CurveStartPoint(edgeCurves(i))
+					End If
+				End If
+				If abs(temp_end(0) - temp_start(0)) < 0.001 Then
+					patch_1(0) = Rhino.CopyObject(edgeCurves(i))
+				End If 
+				If abs(temp_end(0) - temp_start(0)) > 0.001 And abs(temp_end(2) - temp_start(2)) > 4 And (temp_end(2) < 0.001 Or temp_start(2) < 0.001) Then
+					lastCurve = Rhino.CopyObject(edgeCurves(i))
+				End If 
+			Next
+	
+			For i = 1 To UBound(temp_pts) - 1
+				ReDim Preserve patch_1(i)
+				arrParameter = Rhino.SurfaceClosestPoint(exp_s1_split(1), temp_pts(i))
+				patch_1(i) = Rhino.ExtractIsoCurve(exp_s1_split(1), arrParameter, 0)(0)
+			Next
+			ReDim Preserve patch_1(UBound(patch_1)+1)
+			patch_1(UBound(patch_1)) = lastCurve
+			Rhino.DeleteObjects(edgeCurves)
+			'------------------------------------------------------------------
+			
+			'===================================================================================================
+			' Getting curves at the small bend at the stern
+			edgeCurves = Rhino.DuplicateEdgeCurves(exp_s1_split(0), False)	
+			For i = 0 To Ubound(edgeCurves)
+				temp_end = Rhino.CurveEndPoint(edgeCurves(i))
+				temp_start = Rhino.CurveStartPoint(edgeCurves(i))	
+				If temp_end(1) < 0.00001 And temp_start(1) < 0.00001 And abs(temp_end(2) - temp_start(2)) > 4  Then
+					ReDim Preserve patch_1(UBound(patch_1)+1)
+					patch_1(UBound(patch_1)) = Rhino.CopyObject(edgeCurves(i))
+					ReDim Preserve temp_pts(UBound(temp_pts)+1)
+					If temp_end(2) > temp_start(2) Then
+						temp_pts(UBound(temp_pts)) = temp_end
+					Else
+						temp_pts(UBound(temp_pts)) = temp_start
+					End If
+				End If
+			Next
+			Rhino.DeleteObjects(edgeCurves)
+			'===================================================================================================
+	
+			' ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+			' selecting the first curves of patch/exp_s1_split 2 and 4 (see note book for the their numbering )
+			ReDim Preserve patch_2(0)
+			edgeCurves = Rhino.DuplicateEdgeCurves(exp_s1_split(4), False)
+			For i = 0 To UBound(edgeCurves)
+				temp_end = Rhino.CurveEndPoint(edgeCurves(i))
+				temp_start = Rhino.CurveStartPoint(edgeCurves(i))		
+				If abs(temp_end(0) - temp_start(0)) < 0.001 And temp_start(0) > 0 And temp_end(0) > 0 Then
+					patch_2(0) = Rhino.CopyObject(edgeCurves(i))
+				End If 
+				If temp_end(1) < 0.00001 And temp_start(1) < 0.00001 And (temp_start(0) < 0 Or temp_end(0) < 0) Then
+					crvForPartStern = Rhino.CopyObject(edgeCurves(i))
+				End If
+				If temp_start(0) < 0 And temp_end(0) < 0 Then
+					crvForPartStern_2 = Rhino.CopyObject(edgeCurves(i))
+				End If
+			Next
+			Rhino.DeleteObjects(edgeCurves)
+			
+			ReDim Preserve patch_3(0)
+			edgeCurves = Rhino.DuplicateEdgeCurves(exp_s1_split(2), False)
+			For i = 0 To UBound(edgeCurves)
+				temp_end = Rhino.CurveEndPoint(edgeCurves(i))
+				temp_start = Rhino.CurveStartPoint(edgeCurves(i))		
+				If abs(temp_end(0) - temp_start(0)) < 0.001 And temp_start(0) > 0 And temp_end(0) > 0 Then
+					patch_3(0) = Rhino.CopyObject(edgeCurves(i))
+				End If 
+				If temp_start(0) < 0 And temp_end(0) < 0 Then
+					crvForPartStern_3 = Rhino.CopyObject(edgeCurves(i))
+				End If
+			Next
+			Rhino.DeleteObjects(edgeCurves)
+
+			' Getting iso cruves for 2 and 4 patches/exp_s1_split (see note book for the their numbering )
+			For i = 1 To UBound(temp_pts)
+				ReDim Preserve patch_2(i)
+				ReDim Preserve patch_3(i)
+				arrParameter = Rhino.SurfaceClosestPoint(exp_s1_split(4), temp_pts(i))
+				patch_2(i) = Rhino.ExtractIsoCurve(exp_s1_split(4), arrParameter, 0)(0)
+				
+				temp_end = Rhino.CurveEndPoint(patch_2(i))
+				temp_start = Rhino.CurveStartPoint(patch_2(i))
+				If temp_start(2) > temp_end(2) Then 
+					arrParameter = Rhino.SurfaceClosestPoint(exp_s1_split(2), temp_start)
+				Else
+					arrParameter = Rhino.SurfaceClosestPoint(exp_s1_split(2), temp_end)
+				End If
+				patch_3(i) = Rhino.ExtractIsoCurve(exp_s1_split(2), arrParameter, 0)(0)
+			Next	
+			'++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+		
+			'%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+			' Here we are adding the very first curve
+			ReDim Preserve patch_4(0)
+			temp_end = Rhino.CurveEndPoint(patch_1(0))
+			temp_start = Rhino.CurveStartPoint(patch_1(0))
+			If temp_start(2) < temp_end(2) Then 
+				patch_4(0) = Rhino.AddLine(temp_start, array(temp_start(0), 0, temp_start(2)))
+			Else
+				patch_4(0) = Rhino.AddLine(temp_end, array(temp_end(0), 0, temp_end(2)))
+			End If
+			' Here we are adding the remaining curves
+			For i = 1 To UBound(patch_1) - 1
+				temp_end = Rhino.CurveEndPoint(patch_1(i))
+				temp_start = Rhino.CurveStartPoint(patch_1(i))
+				ReDim Preserve patch_4(i)
+				If temp_start(2) < temp_end(2) Then 
+					arrParameter = Rhino.SurfaceClosestPoint(exp_s1_split(3), temp_start)
+				Else
+					arrParameter = Rhino.SurfaceClosestPoint(exp_s1_split(3), temp_end)
+				End If
+				patch_4(i) = Rhino.ExtractIsoCurve(exp_s1_split(3), arrParameter, 1)(0)
+			Next
+			'%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+			
+			' Joining all the curves
+			For i = 0 To UBound(patch_1) - 1
+				ReDim Preserve patch_1234(i)
+				patch_1234(i) = Rhino.JoinCurves(array(patch_1(i), patch_2(i), patch_3(i), patch_4(i)))(0)
+			Next
+			ReDim Preserve patch_1234(UBound(patch_1234)+1)
+			patch_1234(UBound(patch_1234)) = Rhino.JoinCurves(array(patch_1(UBound(patch_1)), patch_2(UBound(patch_2)), patch_3(UBound(patch_3))))(0)
+			
+			
+			' From here we are doing calcualtion of the patch after the stern to the left not towards hull
+			temp_pts = Rhino.DivideCurve(crvForPartStern, 20)			
+			
+			For i = 1 To UBound(temp_pts) - 1
+				ReDim Preserve patch_2(UBound(patch_2)+1)
+				arrParameter = Rhino.SurfaceClosestPoint(exp_s1_split(4), temp_pts(UBound(temp_pts) - i))
+				patch_2(UBound(patch_2)) = Rhino.ExtractIsoCurve(exp_s1_split(4), arrParameter, 0)(0)
+				
+				temp_end = Rhino.CurveEndPoint(patch_2(UBound(patch_2)))
+				temp_start = Rhino.CurveStartPoint(patch_2(UBound(patch_2)))
+				ReDim Preserve patch_3(UBound(patch_3)+1)
+				If temp_start(2) > temp_end(2) Then 
+					arrParameter = Rhino.SurfaceClosestPoint(exp_s1_split(2), temp_start)
+				Else
+					arrParameter = Rhino.SurfaceClosestPoint(exp_s1_split(2), temp_end)
+				End If
+				patch_3(UBound(patch_3)) = Rhino.ExtractIsoCurve(exp_s1_split(2), arrParameter, 0)(0)
+		
+				ReDim Preserve patch_1234(Ubound(patch_1234)+1)
+				patch_1234(Ubound(patch_1234)) = Rhino.JoinCurves(array(patch_2(UBound(patch_2)), patch_3(UBound(patch_3))))(0)
+			Next
+			ReDim Preserve patch_2(UBound(patch_2)+1)
+			ReDim Preserve patch_3(UBound(patch_3)+1)
+			patch_2(UBound(patch_2)) = Rhino.CopyObject(crvForPartStern_2)
+			patch_3(UBound(patch_3)) = Rhino.CopyObject(crvForPartStern_3)
+			ReDim Preserve patch_1234(Ubound(patch_1234)+1)
+			patch_1234(Ubound(patch_1234)) = Rhino.JoinCurves(array(patch_2(UBound(patch_2)), patch_3(UBound(patch_3))))(0)
+			
+			' Because all the curves reversed so we are adding to a new variable sectionsAtAft This is also to maintain consistancy throughout the three sections
+			ReDim sectionsAtAft(0)
+			For i = 0 To UBound(patch_1234)
+				sectionsAtAft(UBound(sectionsAtAft)) = Rhino.CopyObject(patch_1234(UBound(patch_1234) - i))
+				ReDim Preserve sectionsAtAft(UBound(sectionsAtAft)+1)
+			Next
+			ReDim Preserve sectionsAtAft(UBound(sectionsAtAft)-1)
+			Rhino.DeleteObjects(patch_1234)
+			
+			'----------------- saving unjoined sections in the reverse order-------------------------------------------------
+			ReDim sectionsAtAft_segmented(3)
+			ReDim tempSet(0)
+			For i = 0 To UBound(patch_3)
+				tempSet(UBound(tempSet)) = Rhino.CopyObject(patch_3(UBound(patch_3) - i))
+				ReDim Preserve tempSet(UBound(tempSet)+1)
+			Next
+			ReDim Preserve tempSet(UBound(tempSet)-1)
+			sectionsAtAft_segmented(0) = tempSet
+			
+			ReDim tempSet(0)
+			For i = 0 To UBound(patch_2)
+				tempSet(UBound(tempSet)) = Rhino.CopyObject(patch_2(UBound(patch_2) - i))
+				ReDim Preserve tempSet(UBound(tempSet)+1)
+			Next
+			ReDim Preserve tempSet(UBound(tempSet)-1)
+			sectionsAtAft_segmented(1) = tempSet			
+			
+			ReDim tempSet(0)
+			For i = 0 To UBound(patch_1)
+				tempSet(UBound(tempSet)) = Rhino.CopyObject(patch_1(UBound(patch_1) - i))
+				ReDim Preserve tempSet(UBound(tempSet)+1)
+			Next
+			ReDim Preserve tempSet(UBound(tempSet)-1)
+			sectionsAtAft_segmented(2) = tempSet				
+			
+			ReDim tempSet(0)
+			For i = 0 To UBound(patch_4)
+				tempSet(UBound(tempSet)) = Rhino.CopyObject(patch_4(UBound(patch_4) - i))
+				ReDim Preserve tempSet(UBound(tempSet)+1)
+			Next
+			ReDim Preserve tempSet(UBound(tempSet)-1)
+			sectionsAtAft_segmented(3) = tempSet
+			'------------------------------------------------------------------------------------------------------------------
+			
+			' If you dont want to delete the unjoined curves comment these four line
+			Rhino.DeleteObjects(patch_1)
+			Rhino.DeleteObjects(patch_2)
+			Rhino.DeleteObjects(patch_3)
+			Rhino.DeleteObjects(patch_4)
+			
+			Rhino.DeleteObjects(array(crvForPartStern, crvForPartStern_2, crvForPartStern_3))
+
+			strHull = Rhino.JoinSurfacesEx(exp_s1_split, True)
+			strHull = Rhino.ObjectsByType(16, True)
+			strHull = Rhino.JoinSurfacesEx(strHull, True)(0)
+	
+			'+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+			'+++++++++++++++ middle body Part ++++++++++++++++++++++++++++++++++++++
+			'+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+			
+			' From here we are doing calculation for the part of the middle body
+			Dim stepSize:stepSize = abs(p1(0)(0) - p3(1)(0)) / 100
+			sectionsAtMiddleBody = Rhino.AddSrfContourCrvs(strHull, array(p3(1)(0), p3(1)(1), p3(1)(2)), p1(0), stepSize)
+			If UBound(sectionsAtMiddleBody) + 1 <> 101 Then
+				ReDim Preserve sectionsAtMiddleBody(UBound(sectionsAtMiddleBody)+1)
+				sectionsAtMiddleBody(UBound(sectionsAtMiddleBody)) = Rhino.IntersectBreps(strHull, s2)(0)
+			End If
+			Rhino.DeleteObject s2
+
+			'cutterLocation = p3(1)
+			'ReDim sectionsAtMiddleBody(0)
+			'For i = 0 To 99
+			'	cutterLocation(0) = cutterLocation(0) + stepSize
+			'	s1 = Rhino.AddCutPlane(strHull, cutterLocation, array(cutterLocation(0), 0, 0), array(0, 1, 0))
+			'	sectionsAtMiddleBody(UBound(sectionsAtMiddleBody)) = Rhino.IntersectBreps(strHull, s1)(0)
+			'	ReDim Preserve sectionsAtMiddleBody(UBound(sectionsAtMiddleBody)+1)
+			'	Rhino.DeleteObject(s1)
+			'Next
+			'ReDim Preserve sectionsAtMiddleBody(UBound(sectionsAtMiddleBody)-1)
+			
+			
+			
+			'+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+			'+++++++++++++++ Getting Points on Curves ++++++++++++++++++++++++++++++++++++++
+			'+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+			
+			Rhino.DeleteObjects sectionsAtAft ' This temprary
+			'pointsAtForward(),pointsAtMiddleBody()
+			Dim pointsAtAft_temp
+			ReDim pointsAtAft(UBound(sectionsAtAft_segmented))
+			Dim curveDivideNums
+			curveDivideNums = array(18, 52, 28, 2)
+			Dim curveDivPoints, explodeCurves()
+			ReDim explodeCurves(3)
+			For i = 0 To UBound(sectionsAtAft_segmented)
+				ReverseCurvesDirectionDownward sectionsAtAft_segmented(i)
+				explodeCurves(i) = Rhino.CopyObject(sectionsAtAft_segmented(i)(UBOund(sectionsAtAft_segmented(i))))
+				ReDim pointsAtAft_temp(UBound(sectionsAtAft_segmented(i)))
+				For j = 0 To UBound(sectionsAtAft_segmented(i))
+					pointsAtAft_temp(j) = Rhino.DivideCurve(sectionsAtAft_segmented(i)(j), curveDivideNums(i))
+					'Rhino.DeleteObject sectionsAtAft_segmented(i)(j)
+					'sectionsAtAft_segmented(i)(j) = Rhino.AddInterpCurveEx(pointsAtAft_temp(j))
+				Next
+				pointsAtAft(i) = pointsAtAft_temp
+				'Rhino.AddLoftSrf sectionsAtAft_segmented(i), , , 3, 0
+			Next
+			
+			ReDim pointsAtMiddleBody(UBound(sectionsAtMiddleBody))
+			ReverseCurvesDirectionDownward sectionsAtMiddleBody
+			
+			pointsAtMiddleBody(0) = Rhino.DivideCurve(sectionsAtMiddleBody(0), numOfCurveDivPoints)
+			'explodeCurves = Rhino.ExplodeCurves(sectionsAtMiddleBody(0))
+			For i = 0 To UBound(explodeCurves)
+				temp_end = getEndPoint_wrt_z_axis(explodeCurves(i))
+				temp_start = getStartPoint_wrt_z_axis(explodeCurves(i))
+				pointsAtMiddleBody(0) = ReplaceClosestPoint(pointsAtMiddleBody(0), temp_end)
+				pointsAtMiddleBody(0) = ReplaceClosestPoint(pointsAtMiddleBody(0), temp_start)
+			Next
+
+			For i = 1 To UBound(sectionsAtMiddleBody)
+				pointsAtMiddleBody(i) = Rhino.DivideCurve(sectionsAtMiddleBody(i), numOfCurveDivPoints)
+				'Rhino.DeleteObject sectionsAtMiddleBody(i)
+				'sectionsAtMiddleBody(i) = Rhino.AddInterpCurveEx(pointsAtMiddleBody(i))
+			Next
+			'Rhino.AddLoftSrf sectionsAtMiddleBody, , , 3, 0
+			
+			ReDim pointsAtForward(UBound(sectionsAtForward))
+			ReverseCurvesDirectionDownward sectionsAtForward
+			For i = 0 To UBound(sectionsAtForward)
+				pointsAtForward(i) = Rhino.DivideCurve(sectionsAtForward(i), numOfCurveDivPoints)
+				'Rhino.DeleteObject sectionsAtForward(i)
+				'sectionsAtForward(i) = Rhino.AddInterpCurveEx(pointsAtForward(i))
+			Next
+			'Rhino.AddLoftSrf sectionsAtForward, , , 3, 0
+			'Rhino.AddLoftSrf array(sectionsAtMiddleBody(UBound(sectionsAtMiddleBody)), sectionsAtForward(0)), , , 3, 0
+			
+			
+			'+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+			'+++++++++++++++ Storing all the points in a file ++++++++++++++++++++++++++++++++++++++
+			'+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++			
+			
+			
+			'Saving points to a file
+			'Get the file system object
+			Dim objFSO, objStream
+			Set objFSO = CreateObject("Scripting.FileSystemObject")
+
+			' Open a text file to write to
+			Set objStream = objFSO.CreateTextFile("C:\Users\Shahroz.Khan\OneDrive - BA Technologies Ltd\Documents\Design Points_" & CStr(iterations) & ".txt", True)
+			
+			' Write each point as text to the file
+			Dim strPoint, strText
+			
+			For i = 0 To UBound(pointsAtAft)
+				For j =0 To UBound(pointsAtAft(i))
+					For Each strPoint In pointsAtAft(i)(j)
+						strText = Rhino.Pt2Str(strPoint)
+						objStream.WriteLine(strText)
+					Next
+				Next
+			Next
+
+			For i = 0 To UBound(pointsAtMiddleBody)
+				For Each strPoint In pointsAtMiddleBody(i)
+					strText = Rhino.Pt2Str(strPoint)
+					objStream.WriteLine(strText)
+				Next
+			Next
+			
+			For i = 0 To UBound(pointsAtForward)
+				For Each strPoint In pointsAtForward(i)
+					strText = Rhino.Pt2Str(strPoint)
+					objStream.WriteLine(strText)
+				Next
+			Next			
+			
+			objStream.Close
+			
+			Rhino.DeleteObject strHull
+			Rhino.Print("All Curves: " & CStr(UBound(Rhino.ObjectsByType(4, True))))
+			
+			'If UBound(Rhino.ObjectsByType(4, True)) <> 261 Then
+			'	Dim strMessage
+			'	strMessage = "Problem!"
+			'	Rhino.MessageBox strMessage, 64, "Title of the MessageBox"
+			'End If 
+		Else
+			Rhino.Print("Didnt work ++++++++++++++++++++++++++++++++++++++++++++++++++++++")
+		End If
+		Rhino.Command("_ClearUndo")
+	Next
+End Sub
+
+Function ReplaceClosestPoint(arrPoints, ptInput)
+	Dim index, i
+	Dim minDistance, currentDistance
+
+	' Initialize minimum distance with a large value
+	minDistance = Rhino.Distance(arrPoints(0), ptInput)
+	index = 0
+
+	' Iterate through the array of points to find the closest one
+	For i = 1 To UBound(arrPoints)
+		currentDistance = Rhino.Distance(arrPoints(i), ptInput)
+		If currentDistance < minDistance Then
+			minDistance = currentDistance
+			index = i
+		End If
+	Next
+
+	' Replace the closest point with the input point
+	arrPoints(index) = ptInput
+    
+	ReplaceClosestPoint = arrPoints
+End Function
+
+Function getEndPoint_wrt_z_axis(curve)
+	Dim temp_end:temp_end = Rhino.CurveEndPoint(curve)
+	Dim temp_start:temp_start = Rhino.CurveStartPoint(curve)
+	If temp_start(2) < temp_end(2) Then 
+		getEndPoint_wrt_z_axis = temp_start
+	Else
+		getEndPoint_wrt_z_axis = temp_end
+	End If
+End Function
+
+Function getStartPoint_wrt_z_axis(curve)
+	Dim temp_end:temp_end = Rhino.CurveEndPoint(curve)
+	Dim temp_start:temp_start = Rhino.CurveStartPoint(curve)
+	If temp_start(2) > temp_end(2) Then 
+		getStartPoint_wrt_z_axis = temp_start
+	Else
+		getStartPoint_wrt_z_axis = temp_end
+	End If
+End Function
+
+Function start_end_points(arrCurves)
+	Dim i, allPoints()
+	ReDim allPoints(0)
+	For i = 0 To UBound(arrCurves)
+		allPoints(UBound(allPoints)) = Rhino.CurveStartPoint(arrCurves(i))
+		ReDim Preserve allPoints(UBound(allPoints)+1)
+		allPoints(UBound(allPoints)) = Rhino.CurveStartPoint(arrCurves(i))
+		ReDim Preserve allPoints(UBound(allPoints)+1)
+	Next
+	ReDim Preserve allPoints(UBound(allPoints)-1)
+	start_end_points = allPoints
+End Function
+
+Function ReverseCurvesDirectionDownward(arrCurves)
+	Dim i, ptStart, ptEnd
+    
+	For i = 0 To UBound(arrCurves)
+		ptStart = Rhino.CurveStartPoint(arrCurves(i))
+		ptEnd = Rhino.CurveEndPoint(arrCurves(i))
+        
+		' Check if the curve is facing upwards based on Z-values
+		If ptStart(2) < ptEnd(2) Then 
+			' If the curve is facing upwards, reverse the curve
+			Rhino.ReverseCurve arrCurves(i)
+		End If
+	Next
+End Function

@@ -1,0 +1,113 @@
+Option Explicit
+'Script written by <insert name>
+'Script copyrighted by <insert company name>
+'Script version 14 July 2023 10:37:00
+
+Call Main()
+Sub Main()
+	Dim desNo
+	Dim ptCrv(), strCrv()
+	Dim i, j, k
+	For desNo =1 To 1'1'600 77 94 2 5 8 11 12 13 14 32 43 47* 73 92 95
+		Rhino.Command("SelAll")
+		Rhino.Command("Delete")
+		Dim pointSet:pointSet = ImportPoints("H:\152 DM-BAR tanker optimisation - General\C- Naval Arch\Dimension Reduction\points\design_" & CStr(desNo) & ".txt")
+		i = 0
+		j = 0 
+		For k = 0 To UBound(pointSet)
+			ReDim Preserve ptCrv(i)
+			ptCrv(i) = pointSet(k)
+			i = i + 1
+			If UBound(ptCrv) = 20 Then
+				ReDim Preserve strCrv(j)
+				strCrv(j) = Rhino.AddInterpCurveEx(ptCrv)
+				j = j + 1
+				i = 0
+			End If
+		Next	
+		Dim stern:stern = Rhino.AddLoftSrf(array(Rhino.MirrorObject(strCrv(Ubound(strCrv)), Rhino.WorldZXPlane, True), strCrv(Ubound(strCrv))), , , 2, 0)(0)
+		
+		Dim surf:surf = Rhino.AddLoftSrf(strCrv, , , 1, 0)(0)
+		Dim mirSurf:mirSurf = Rhino.MirrorObject(surf, Rhino.WorldZXPlane, True)
+		Rhino.JoinSurfacesEx array(stern, surf, mirSurf)
+		Rhino.Command("SelCrv Delete")
+		Rhino.DeleteObjects array(surf, mirSurf, stern)
+		Rhino.Command("SelNone")
+		
+		'creating deck
+		Dim hullsurfs:hullsurfs = Rhino.ObjectsByType(16, False)(0)
+		Dim edgeCurves:edgeCurves = Rhino.DuplicateEdgeCurves(hullsurfs, False)		
+		Rhino.AddLoftSrf array(edgeCurves(3), edgeCurves(6)), , , 2, 0
+		Rhino.Command("SelCrv Delete")
+		Rhino.Command("SelAll Join")
+		Rhino.Command("SelNone")
+		
+		'Creating mesh and saving stls
+		'Dim strHull:strHull = Rhino.ObjectsByType(16, False)(0)
+		'Dim arrMP:arrMP = Rhino.MeshParameters(4)
+		'Dim mesh:mesh = Rhino.MeshObjects(strHull, -1, arrMP)
+		'Rhino.MeshQuadsToTriangles mesh
+		'Rhino.DeleteObjects(strHull)
+		
+		'Rhino.Command("_-SelMeshEdges SelMesh _Enter")
+		'Rhino.Command(" WeldEdge")
+		'Rhino.Command("SelMesh")
+		Rhino.Command("SelAll")
+		Rhino.Command("!-_Export " & Chr(34) & "H:\Project with Prof Kaklis\01 BAR\reduced designs\rd_igs\rs_igs_" & Cstr(desNo) & ".igs" & Chr(34) & " _Enter _Enter")
+	Next
+End Sub
+
+
+'---------------------------------------------------------------
+' Subroutine: ImportPoints
+' Purpose:    Import points from a text file.
+'---------------------------------------------------------------
+Function ImportPoints(strFileName)
+	Dim arrAllPoint()
+	' Prompt the user for a file to import
+	Dim strFilter
+	strFilter = "Text File (*.txt)|*.txt|All Files (*.*)|*.*|"
+	'	strFileName = Rhino.OpenFileName("Open Point File", strFilter)
+	If IsNull(strFileName) Then Exit Function
+ 
+	' The the file system object
+	Dim objFSO, objFile
+	Set objFSO = CreateObject("Scripting.FileSystemObject")
+	' Try opening the text file
+	On Error Resume Next
+	Set objFile = objFSO.OpenTextFile(strFileName, 1)
+	If Err Then
+		MsgBox Err.Description
+		Exit Function
+	End If
+ 
+	Rhino.EnableRedraw False
+ 
+	' Read each line from the file
+	Dim strLine, arrPoint, i
+	i = 0
+	Do While objFile.AtEndOfStream <> True
+		strLine = objFile.ReadLine
+		If Not IsNull(strLine) Then
+			' Remove any double-quote characters
+			strLine = Replace(strLine, Chr(34), , 1)
+			' Convert the string to a 3D point
+			arrPoint = Rhino.Str2Pt(strLine)
+			' Add the point to Rhino
+			If IsArray(arrPoint) Then
+				ReDim Preserve arrAllPoint(i)
+				' AddPoint will add a point object to Rhino
+				'	Rhino.AddPoint arrPoint
+				arrAllPoint(i) = arrPoint
+				i = i + 1
+			End If
+		End If
+	Loop
+ 
+	Rhino.EnableRedraw True
+	objFile.Close
+	Set objFile = Nothing
+	Set objFSO = Nothing
+	
+	ImportPoints = arrAllPoint
+End Function
